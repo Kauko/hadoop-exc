@@ -5,7 +5,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -15,6 +14,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -25,14 +25,25 @@ public class NgramInitialCount {
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
             Map<String, Integer> map = new HashMap<String, Integer>();
-			String[] tokens = value.toString().split(" ");
+			String[] temp = value.toString().split("\\s+");
+            ArrayList<String> tokens = new ArrayList<String>();
+            for (String s : temp){
+                if(s.length() > 0)
+                  tokens.add(s);
+            }
+
             int n = Integer.parseInt(context.getConfiguration().get("N"));
-			for(int i = 0; i+(n-1) < tokens.length ; i++) {
+
+            findKeys:
+			for(int i = 0; i+(n-1) < tokens.size() ; i++) {
                 int j = 0;
                 String sKey = "";
 
                 while (j < n){
-                    sKey += tokens[i+j].charAt(0) + " ";
+                    Character letter = tokens.get(i+j).charAt(0);
+                    if (!Character.isAlphabetic(letter))
+                         continue findKeys;
+                    sKey += letter + " ";
                     j++;
                 }
 

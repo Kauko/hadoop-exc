@@ -12,35 +12,27 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
-public class WordLengthCount {
-	public static class WordMap extends
-			Mapper<LongWritable, Text, IntWritable, IntWritable> {
+public class WordCountLocal {
+	public static class Map extends 
+			Mapper<LongWritable, Text, Text, IntWritable> {
+		private final static IntWritable one = new IntWritable(1);
+		private Text word = new Text();
 
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
-            Map<Integer, Integer> map = new HashMap<Integer, Integer>();
-			String[] tokens = value.toString().split("\\s+");
-			for(String token : tokens) {
-                int tokenLength = token.length();
-                if (map.containsKey(tokenLength)){
-                    int total = map.get(tokenLength) +1;
-                    map.put(tokenLength, total);
-                }else{
-                    map.put(tokenLength, 1);
-                }
-
-
+			String line = value.toString();
+			StringTokenizer tokenizer = new StringTokenizer(line);
+			while (tokenizer.hasMoreTokens()) {
+				word.set(tokenizer.nextToken());
+		    	System.out.println("Debug: " + key + " " + word);
+				context.write(word, one);
 			}
-
-            for (Map.Entry<Integer, Integer> item : map.entrySet()){
-                context.write(new IntWritable(item.getKey()), new IntWritable(item.getValue()));
-            }
 		}
 	}
 
 	public static class Reduce extends 
-			Reducer<IntWritable, IntWritable, IntWritable, IntWritable> {
-		public void reduce(IntWritable key, Iterable<IntWritable> values,
+			Reducer<Text, IntWritable, Text, IntWritable> {
+		public void reduce(Text key, Iterable<IntWritable> values,
 				Context context) throws IOException, InterruptedException {
 			int sum = 0;
 			for (IntWritable val : values) {
@@ -51,19 +43,20 @@ public class WordLengthCount {
 	}
 
 	public static void main(String[] args) throws Exception {
-		// Run on a pseudo-distributed node 
+	
+		// Run on a local node
 		Configuration conf = new Configuration();
+		conf.set("fs.default.name", "file:///");
+		conf.set("mapred.job.tracker", "local");
+
 		Job job = new Job(conf, "wordcount");
 
-		job.setOutputKeyClass(IntWritable.class);
+		job.setOutputKeyClass(Text.class);
 		job.setOutputValueClass(IntWritable.class);
 
-        job.setMapOutputKeyClass(IntWritable.class);
-        job.setMapOutputValueClass(IntWritable.class);
+		job.setJarByClass(WordCountLocal.class);
 
-		job.setJarByClass(WordLengthCount.class);
-
-		job.setMapperClass(WordMap.class);
+		job.setMapperClass(Map.class);
 		job.setCombinerClass(Reduce.class);
 		job.setReducerClass(Reduce.class);
 
