@@ -17,14 +17,23 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class NgramInitialRF {
+
+    final static int THOUSAND = 1000;
+    final static int MILLION = 1000000;
+    final static int MAX_MAP_ELEMENTS = 1 * MILLION;
+
 	public static class WordMap extends
 			Mapper<LongWritable, Text, Text, MapWritable> {
 
+        private Map<String,HashMap<String,Integer>> map;
+        private static final int FLUSH_SIZE = 1000;
+
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
-            Map<String,HashMap<String,Integer>> map = new HashMap<String,HashMap<String,Integer>>();
+
             String[] temp = value.toString().split("\\s+");
             ArrayList<String> tokens = new ArrayList<String>();
+            Map<String, HashMap<String, Integer>> map = getMap();
             for (String s : temp){
                 if(s.length() > 0)
                     tokens.add(s);
@@ -35,14 +44,14 @@ public class NgramInitialRF {
             findKeys:
             for (int i = 0; i+(n-1) < tokens.size() ; i++){
                 char letter = tokens.get(i).charAt(0);
-                if (!Character.isAlphabetic(letter))
+                if (!Character.isLetter(letter))
                     continue findKeys;
                 String sKey = "" + letter;
                 String sValue = "";
                 int j = 1;
                 while (j < n){
                     letter = tokens.get(i+j).charAt(0);
-                    if (!Character.isAlphabetic(letter))
+                    if (!Character.isLetter(letter))
                         continue findKeys;
                     sValue +=  letter + " ";
                     j++;
@@ -62,16 +71,45 @@ public class NgramInitialRF {
 
             }
 
+            flush(context, false);
+		}
+
+        private void flush(Context context, boolean force)
+                throws IOException, InterruptedException {
+            Map<String, HashMap<String, Integer>> map = getMap();
+            if(!force) {
+                int size = map.size();
+                if(size < FLUSH_SIZE)
+                    return;
+            }
+
             for (Map.Entry<String, HashMap<String, Integer>> item : map.entrySet()){
                 MapWritable ret = new MapWritable();
                 for (Map.Entry<String, Integer> valueMap : item.getValue().entrySet()){
-                      ret.put(new Text(valueMap.getKey()), new IntWritable(valueMap.getValue()));
+                    ret.put(new Text(valueMap.getKey()), new IntWritable(valueMap.getValue()));
+                    if (Integer.parseInt(context.getConfiguration().get("MAP_SIZE")) > 0 && ret.size() > Integer.parseInt(context.getConfiguration().get("MAP_SIZE"))){
+                        context.write(new Text(item.getKey()), ret);
+                        ret.clear();
+                    }
                 }
                 context.write(new Text(item.getKey()), ret);
 
             }
-		}
-	}
+
+            map.clear(); //make sure to empty map
+        }
+
+        protected void cleanup(Context context)
+                throws IOException, InterruptedException {
+            flush(context, true); //force flush no matter what at the end
+        }
+
+        public Map<String,HashMap<String,Integer>> getMap() {
+            if(null == map) //lazy loading
+                map = new HashMap<String,HashMap<String,Integer>>();
+            return map;
+        }
+    }
 
 	public static class Reduce extends 
 			Reducer<Text, MapWritable, Text, DoubleWritable> {
@@ -99,15 +137,6 @@ public class NgramInitialRF {
                     context.write(new Text(item.getKey()), new DoubleWritable(item.getValue()));
 
             }
-
-
-
-			/*for (DoubleWritable val : values) {
-				total = (total != 0) ? total * val.get() : val.get();
-            }
-            double limit = Double.parseDouble(context.getConfiguration().get("P"));
-            if(total >= limit)
-			    context.write(key, new DoubleWritable(total));*/
 		}
 	}
 
@@ -116,6 +145,11 @@ public class NgramInitialRF {
 		Configuration conf = new Configuration();
         conf.set("N", args[2]);
         conf.set("P", args[3]);
+        try{
+            conf.set("MAP_SIZE", args[4]);
+        }catch (Exception e){
+            conf.set("MAP_SIZE", ""+MAX_MAP_ELEMENTS);
+        }
 		Job job = new Job(conf, "nGramInitialRF");
 
 		job.setOutputKeyClass(Text.class);

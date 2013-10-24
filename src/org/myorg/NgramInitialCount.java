@@ -19,6 +19,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class NgramInitialCount {
+
+
 	public static class WordMap extends
 			Mapper<LongWritable, Text, Text, IntWritable> {
 
@@ -41,7 +43,7 @@ public class NgramInitialCount {
 
                 while (j < n){
                     Character letter = tokens.get(i+j).charAt(0);
-                    if (!Character.isAlphabetic(letter))
+                    if (!Character.isLetter(letter))
                          continue findKeys;
                     sKey += letter + " ";
                     j++;
@@ -81,6 +83,7 @@ public class NgramInitialCount {
 		// Run on a pseudo-distributed node 
 		Configuration conf = new Configuration();
         conf.set("N", args[2]);
+
 		Job job = new Job(conf, "nGramInitialCount");
 
 		job.setOutputKeyClass(Text.class);
