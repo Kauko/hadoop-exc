@@ -18,10 +18,6 @@ import java.util.Map;
 
 public class NgramInitialRF {
 
-    final static int THOUSAND = 1000;
-    final static int MILLION = 1000000;
-    final static int MAX_MAP_ELEMENTS = 1 * MILLION;
-
 	public static class WordMap extends
 			Mapper<LongWritable, Text, Text, MapWritable> {
 
@@ -31,32 +27,40 @@ public class NgramInitialRF {
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
 
-            String[] temp = value.toString().split("\\s+");
-            ArrayList<String> tokens = new ArrayList<String>();
+            //Split the input based on whitespace
+            String[] tokens = value.toString().split("\\s+");
+            /*
+            Key <Key2, value>
+            Key = the first character of the Ngram
+            Key2 = the rest of the characters of the Ngram
+            value = how many times Key+Key2 string Ngram appears
+
+            This way it's easy for us to calculate the frequency!
+             */
             Map<String, HashMap<String, Integer>> map = getMap();
-            for (String s : temp){
-                if(s.length() > 0)
-                    tokens.add(s);
-            }
+
             int n = Integer.parseInt(context.getConfiguration().get("N"));
 
 
             findKeys:
-            for (int i = 0; i+(n-1) < tokens.size() ; i++){
-                char letter = tokens.get(i).charAt(0);
+            for (int i = 0; i+(n-1) < tokens.length; i++){
+                char letter = tokens[i].charAt(0);
+                //If this string starts with a special character, ignore the string
                 if (!Character.isLetter(letter))
                     continue findKeys;
                 String sKey = "" + letter;
                 String sValue = "";
                 int j = 1;
                 while (j < n){
-                    letter = tokens.get(i+j).charAt(0);
+                    letter = tokens[i+j].charAt(0);
+                    //Again, ignore strings that start with special character
                     if (!Character.isLetter(letter))
                         continue findKeys;
                     sValue +=  letter + " ";
                     j++;
                 }
 
+                //Remove empty space
                 sValue = sValue.substring(0, sValue.length()-1);
 
                 if (!map.containsKey(sKey))
@@ -87,25 +91,25 @@ public class NgramInitialRF {
                 MapWritable ret = new MapWritable();
                 for (Map.Entry<String, Integer> valueMap : item.getValue().entrySet()){
                     ret.put(new Text(valueMap.getKey()), new IntWritable(valueMap.getValue()));
-                    if (Integer.parseInt(context.getConfiguration().get("MAP_SIZE")) > 0 && ret.size() > Integer.parseInt(context.getConfiguration().get("MAP_SIZE"))){
+                    /*if (Integer.parseInt(context.getConfiguration().get("MAP_SIZE")) > 0 && ret.size() > Integer.parseInt(context.getConfiguration().get("MAP_SIZE"))){
                         context.write(new Text(item.getKey()), ret);
                         ret.clear();
-                    }
+                    }*/
                 }
                 context.write(new Text(item.getKey()), ret);
 
             }
 
-            map.clear(); //make sure to empty map
+            map.clear();
         }
 
         protected void cleanup(Context context)
                 throws IOException, InterruptedException {
-            flush(context, true); //force flush no matter what at the end
+            flush(context, true);
         }
 
         public Map<String,HashMap<String,Integer>> getMap() {
-            if(null == map) //lazy loading
+            if(null == map)
                 map = new HashMap<String,HashMap<String,Integer>>();
             return map;
         }
@@ -119,11 +123,14 @@ public class NgramInitialRF {
             int totalNum = 0;
             double limit = Double.parseDouble(context.getConfiguration().get("P"));
 
+            // values = all maps associated with this key
             for (MapWritable map : values){
-                totalNum += map.size();
+                //item = key: rest of the Ngram, value: total amount of this Ngram
                 for (Map.Entry<Writable, Writable> item : map.entrySet()){
                     String sKey = key + " " + item.getKey();
                     double value = ((IntWritable)item.getValue()).get();
+                    //The total number of Ngrams starting with "key" character
+                    totalNum += value;
                     if(ret.containsKey(sKey))
                         ret.put(sKey, ret.get(sKey)+value);
                     else
@@ -145,11 +152,7 @@ public class NgramInitialRF {
 		Configuration conf = new Configuration();
         conf.set("N", args[2]);
         conf.set("P", args[3]);
-        try{
-            conf.set("MAP_SIZE", args[4]);
-        }catch (Exception e){
-            conf.set("MAP_SIZE", ""+MAX_MAP_ELEMENTS);
-        }
+
 		Job job = new Job(conf, "nGramInitialRF");
 
 		job.setOutputKeyClass(Text.class);
